@@ -12,6 +12,23 @@ dist
 dist-ssr
 *.local
 
+# NUNCA versionar certificados digitais nem chaves privadas
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.crt
+certificados/
+
+# Exceção: cadeias de CA públicas da ICP-Brasil (necessárias p/ validar a SEFAZ)
+!server/certs/svrs-chain.pem
+!server/certs/raiz-v10.crt
+
+# Banco local
+*.db
+*.db-journal
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -8,7 +8,11 @@
     "start": "node src/index.js",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "sefaz:status": "node scripts/test-status.js",
+    "sefaz:cert": "node scripts/cert-info.js",
+    "sefaz:entrada": "node scripts/test-entrada.js",
+    "sefaz:sync": "node scripts/sync-entrada.js"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",

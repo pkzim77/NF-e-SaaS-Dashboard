@@ -1,6 +1,10 @@
 export function serializeNfe(n) {
   return {
     id: n.id,
+    tipo: n.tipo,
+    modelo: n.modelo,
+    origem: n.origem,
+    resumo: n.resumo,
     supId: n.supplierId,
     fornecedor: n.supplier.nome,
     fornCnpj: n.supplier.cnpj,
