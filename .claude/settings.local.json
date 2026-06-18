@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"/c/Users/User/Downloads/NF-e SaaS Dashboard/server\" && cat node_modules/@prisma/client/default.d.ts | head -60)",
+      "Read(//c/c/Users/User/Downloads/NF-e SaaS Dashboard/server/node_modules/@prisma/client/**)"
+    ]
+  }
+}

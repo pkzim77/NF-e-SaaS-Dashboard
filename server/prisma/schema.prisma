@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Company {
+  id                 String   @id @default(cuid())
+  initials           String
+  nome               String
+  razaoSocial        String
+  nomeFantasia       String
+  segmento           String
+  cnpj               String   @unique
+  ie                 String
+  endereco           String
+  cidadeUf           String
+  telefone           String
+  email              String
+  situacao           String
+  dataCadastro       String
+  scheduleFrequency  String   @default("1h")
+
+  suppliers   Supplier[]
+  nfes        Nfe[]
+  certificate Certificate?
+  certHistory CertHistoryEntry[]
+  categories  CategorySpend[]
+  monthly     MonthlySpend[]
+}
+
+model Supplier {
+  id        String  @id @default(cuid())
+  nome      String
+  cnpj      String
+  ie        String
+  cidade    String
+
+  company   Company @relation(fields: [companyId], references: [id])
+  companyId String
+
+  nfes      Nfe[]
+}
+
+model Nfe {
+  id        String   @id @default(cuid())
+  numero    String
+  serie     String
+  data      String
+  situacao  String
+  frete     Float
+  totalProd Float
+  valor     Float
+  chave     String   @unique
+
+  company    Company  @relation(fields: [companyId], references: [id])
+  companyId  String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  supplierId String
+
+  itens NfeItem[]
+}
+
+model NfeItem {
+  id        String @id @default(cuid())
+  codigo    String
+  descricao String
+  ncm       String
+  cfop      String
+  qtd       Float
+  vUnit     Float
+  vTotal    Float
+
+  nfe   Nfe    @relation(fields: [nfeId], references: [id])
+  nfeId String
+}
+
+model Certificate {
+  id          String  @id @default(cuid())
+  titular     String
+  arquivo     String
+  emitidoEm   String
+  validoAte   String
+
+  company   Company @relation(fields: [companyId], references: [id])
+  companyId String  @unique
+}
+
+model CertHistoryEntry {
+  id    String @id @default(cuid())
+  title String
+  desc  String
+  date  String
+  dot   String
+
+  company   Company @relation(fields: [companyId], references: [id])
+  companyId String
+}
+
+model CategorySpend {
+  id     String @id @default(cuid())
+  nome   String
+  valor  Float
+  color  String
+
+  company   Company @relation(fields: [companyId], references: [id])
+  companyId String
+}
+
+model MonthlySpend {
+  id    String @id @default(cuid())
+  mes   String
+  valor Float
+
+  company   Company @relation(fields: [companyId], references: [id])
+  companyId String
+}
