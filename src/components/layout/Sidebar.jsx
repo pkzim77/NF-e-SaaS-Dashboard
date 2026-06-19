@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { IconBarChart, IconBuilding, IconCheck, IconDocument, IconGrid, IconSwap } from '../../icons/Icons';
+import { IconBarChart, IconBuilding, IconCheck, IconDocument, IconGrid, IconSwap, IconWarningTriangle } from '../../icons/Icons';
 import { useApi } from '../../hooks/useApi';
+import { timeAgo } from '../../utils/format';
 
 function navLinkClass({ isActive }) {
   return [
@@ -11,6 +12,10 @@ function navLinkClass({ isActive }) {
 
 export default function Sidebar() {
   const { data: nfes } = useApi('nfes');
+  const { data: company } = useApi('company');
+
+  const sync = company?.sync;
+  const ago = timeAgo(sync?.lastSync);
 
   const navItems = [
     { to: '/', end: true, label: 'Dashboard', icon: IconGrid },
@@ -48,12 +53,12 @@ export default function Sidebar() {
 
       <div className="mt-auto px-3.5 py-4">
         <div className="flex items-start gap-[11px] rounded-[14px] border border-border bg-surface-2 px-3.5 py-[13px]">
-          <div className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] bg-pos-soft">
-            <IconCheck size={16} color="var(--pos)" />
+          <div className={`flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] ${sync ? 'bg-pos-soft' : 'bg-warn-soft'}`}>
+            {sync ? <IconCheck size={16} color="var(--pos)" /> : <IconWarningTriangle size={16} />}
           </div>
           <div className="leading-[1.3]">
-            <div className="text-[12.5px] font-bold">Coleta ativa</div>
-            <div className="text-[11px] text-text-3">Última sync há 12 min</div>
+            <div className="text-[12.5px] font-bold">{sync ? 'Coleta ativa' : 'Sem sincronização'}</div>
+            <div className="text-[11px] text-text-3">{sync ? `Última sync ${ago}` : 'Nenhuma coleta realizada ainda'}</div>
           </div>
         </div>
       </div>

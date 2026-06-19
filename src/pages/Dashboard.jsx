@@ -1,20 +1,35 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import LoadingState from '../components/ui/LoadingState';
 import AreaChart from '../components/charts/AreaChart';
-import DonutChart from '../components/charts/DonutChart';
+import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useApi } from '../hooks/useApi';
-import { stats } from '../data/stats';
-import { brl, brlShort, formatDate, formatTodayLong, initials, shortName } from '../utils/format';
+import { IconAxisBars, IconBarsTrend, IconClock, IconDocument, IconCifrao, IconTrendUp, IconUsers } from '../icons/Icons';
+import { brl, brlShort, formatDate, formatTodayLong, initials, monthYearLabel, shortName } from '../utils/format';
 import { toneBg, toneText } from '../utils/tone';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const showToast = useToast();
-  const { data: nfes } = useApi('nfes');
-  const { data: company } = useApi('company');
+  const [syncing, setSyncing] = useState(false);
+  const { data: nfes, refetch: refetchNfes } = useApi('nfes');
+  const { data: company, refetch: refetchCompany } = useApi('company');
+
+  const handleCollect = async () => {
+    setSyncing(true);
+    showToast('Coleta iniciada — consultando SEFAZ…');
+    try {
+      const result = await api.post('sync');
+      await Promise.all([refetchNfes(), refetchCompany()]);
+      showToast(`Coleta concluída — ${result.novos} nota(s) nova(s)`);
+    } catch (e) {
+      showToast('Falha na coleta: ' + e.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const sorted = useMemo(() => (nfes ? [...nfes].sort((a, b) => b.data.localeCompare(a.data)) : []), [nfes]);
 
@@ -44,15 +59,57 @@ export default function Dashboard() {
     return arr.slice(0, 5).map((s) => ({ nome: shortName(s.nome), valor: brl(s.v), pct: Math.round((s.v / max) * 100) }));
   }, [nfes]);
 
-  const categoryRows = useMemo(() => {
-    if (!company) return [];
-    const total = company.categories.reduce((a, b) => a + b.v, 0);
-    return company.categories.map((c) => ({ ...c, pct: Math.round((c.v / total) * 100) }));
-  }, [company]);
+  const cards = useMemo(() => {
+    if (!nfes) return [];
+    const today = new Date();
+    const todayIso = today.toISOString().slice(0, 10);
+    const ym = todayIso.slice(0, 7);
+    const year = todayIso.slice(0, 4);
+    const valid = nfes.filter((n) => n.sit !== 'cancelada');
+
+    const sum = (arr) => arr.reduce((a, b) => a + b.valor, 0);
+    const hoje = sum(valid.filter((n) => n.data === todayIso));
+    const noMes = sum(valid.filter((n) => n.data.startsWith(ym)));
+    const noAno = sum(valid.filter((n) => n.data.startsWith(year)));
+    const novasNoMes = nfes.filter((n) => n.data.startsWith(ym)).length;
+    const fornecedoresAtivos = new Set(valid.map((n) => n.supId)).size;
+    const ticketMedio = valid.length ? sum(valid) / valid.length : 0;
+    const ultima = sorted[0];
+
+    const list = [
+      { label: 'Comprado hoje', value: brl(hoje), icon: IconTrendUp, tone: 'accent', sub: formatDate(todayIso) },
+      { label: 'Comprado no mês', value: brl(noMes), icon: IconBarsTrend, tone: 'pos', sub: monthYearLabel(ym) },
+      { label: 'Comprado no ano', value: brlShort(noAno), icon: IconAxisBars, tone: 'accent', sub: year },
+      {
+        label: 'NF-e recebidas',
+        value: String(nfes.length),
+        icon: IconDocument,
+        tone: 'accent',
+        delta: novasNoMes ? `${novasNoMes} este mês` : null,
+        deltaTone: 'accent',
+        sub: 'no total',
+      },
+      { label: 'Fornecedores ativos', value: String(fornecedoresAtivos), icon: IconUsers, tone: 'pos', sub: 'com notas recebidas' },
+      { label: 'Ticket médio', value: brl(ticketMedio), icon: IconCifrao, tone: 'accent', sub: 'por nota' },
+      ultima && {
+        label: 'Última nota',
+        value: shortName(ultima.fornecedor),
+        icon: IconClock,
+        tone: 'accent',
+        delta: 'NF ' + ultima.numero,
+        deltaTone: 'accent',
+        sub: formatDate(ultima.data),
+      },
+    ].filter(Boolean);
+
+    return list;
+  }, [nfes, sorted]);
 
   if (!nfes || !company) return <LoadingState />;
 
-  const yearTotal = company.monthly.reduce((a, b) => a + b.v, 0);
+  const monthly = company.monthly || [];
+  const yearTotal = monthly.reduce((a, b) => a + b.v, 0);
+  const periodLabel = monthly.length ? `${monthYearLabel(monthly[0].ym)} – ${monthYearLabel(monthly[monthly.length - 1].ym)}` : '';
 
   return (
     <div>
@@ -63,13 +120,14 @@ export default function Dashboard() {
         </div>
         <div className="flex gap-[9px]">
           <button
-            onClick={() => showToast('Coleta iniciada — consultando SEFAZ…')}
-            className="flex h-10 items-center gap-2 rounded-[11px] border border-border bg-surface px-4 text-[13px] font-semibold text-text"
+            onClick={handleCollect}
+            disabled={syncing}
+            className="flex h-10 items-center gap-2 rounded-[11px] border border-border bg-surface px-4 text-[13px] font-semibold text-text disabled:opacity-60"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className={syncing ? 'animate-spin' : ''}>
               <path d="M20 12a8 8 0 11-2.3-5.6M20 4v4h-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Coletar agora
+            {syncing ? 'Coletando…' : 'Coletar agora'}
           </button>
           <button
             onClick={() => navigate('/relatorios')}
@@ -81,7 +139,7 @@ export default function Dashboard() {
       </div>
 
       <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-4">
-        {stats.map((s) => {
+        {cards.map((s) => {
           const Icon = s.icon;
           return (
             <Card key={s.label}>
@@ -93,9 +151,11 @@ export default function Dashboard() {
               </div>
               <div className="font-mono text-[25px] font-extrabold tracking-[-0.03em]">{s.value}</div>
               <div className="mt-[9px] flex items-center gap-1.5">
-                <span className={`rounded-full px-[7px] py-0.5 text-[11.5px] font-bold ${toneBg[s.deltaTone]} ${toneText[s.deltaTone]}`}>
-                  {s.delta}
-                </span>
+                {s.delta && (
+                  <span className={`rounded-full px-[7px] py-0.5 text-[11.5px] font-bold ${toneBg[s.deltaTone]} ${toneText[s.deltaTone]}`}>
+                    {s.delta}
+                  </span>
+                )}
                 <span className="text-[11.5px] text-text-3">{s.sub}</span>
               </div>
             </Card>
@@ -108,39 +168,27 @@ export default function Dashboard() {
           <div className="mb-2 flex items-start justify-between">
             <div>
               <h3 className="text-[15px] font-bold">Evolução mensal de compras</h3>
-              <div className="mt-0.5 text-[12px] text-text-3">Janeiro – Junho 2026</div>
+              <div className="mt-0.5 text-[12px] text-text-3">{periodLabel}</div>
             </div>
             <div className="text-right">
               <div className="font-mono text-[20px] font-extrabold tracking-[-0.02em]">{brlShort(yearTotal)}</div>
-              <div className="text-[11.5px] font-bold text-pos">acumulado no ano</div>
+              <div className="text-[11.5px] font-bold text-pos">acumulado no período</div>
             </div>
           </div>
-          <AreaChart data={company.monthly} />
-          <div className="mt-1.5 flex justify-between px-1.5">
-            {company.monthly.map((m) => (
-              <span key={m.m} className="text-[11.5px] font-semibold text-text-3">
-                {m.m}
-              </span>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <h3 className="mb-3.5 text-[15px] font-bold">Compras por categoria</h3>
-          <div className="flex items-center gap-3.5">
-            <div className="flex-none">
-              <DonutChart data={company.categories} />
-            </div>
-            <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-              {categoryRows.map((c) => (
-                <div key={c.nome} className="flex items-center gap-2.5">
-                  <span className="h-[9px] w-[9px] flex-none rounded-[3px]" style={{ background: c.color }} />
-                  <span className="flex-1 text-[12px] text-text-2">{c.nome}</span>
-                  <span className="font-mono text-[12px] font-bold">{c.pct}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          {monthly.length > 1 ? (
+            <>
+              <AreaChart data={monthly} />
+              <div className="mt-1.5 flex justify-between px-1.5">
+                {monthly.map((m) => (
+                  <span key={m.ym} className="text-[11.5px] font-semibold text-text-3">
+                    {m.m}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="py-10 text-center text-[12.5px] text-text-3">Dados insuficientes para o gráfico ainda.</div>
+          )}
         </Card>
       </div>
 

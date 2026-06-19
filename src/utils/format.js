@@ -20,7 +20,7 @@ export function formatDate(iso) {
 export function formatDateLong(iso) {
   const [y, m, d] = iso.split('-');
   const ms = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-  return `${d} ${ms[+m - 1]} ${y}, 14:32`;
+  return `${d} ${ms[+m - 1]} ${y}`;
 }
 
 export function initials(nome) {
@@ -42,4 +42,32 @@ export function shortName(nome) {
 export function formatTodayLong(date = new Date()) {
   const s = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export function parseBrDate(d) {
+  if (!d) return null;
+  const [day, month, year] = d.split('/');
+  return new Date(+year, +month - 1, +day);
+}
+
+export function daysUntil(d) {
+  const date = parseBrDate(d);
+  if (!date) return null;
+  return Math.round((date - new Date()) / 86400000);
+}
+
+export function timeAgo(iso) {
+  if (!iso) return null;
+  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diffMin < 1) return 'agora';
+  if (diffMin < 60) return `há ${diffMin} min`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `há ${diffH}h`;
+  return `há ${Math.round(diffH / 24)}d`;
+}
+
+export function monthYearLabel(ym) {
+  const [y, m] = ym.split('-');
+  const label = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(+y, +m - 1, 1));
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }

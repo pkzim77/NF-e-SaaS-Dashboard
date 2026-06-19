@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTheme } from '../../context/ThemeContext';
 import { useSearch } from '../../context/SearchContext';
 import { useApi } from '../../hooks/useApi';
+import { brl, daysUntil, formatDate, shortName, timeAgo } from '../../utils/format';
 import {
   IconBell,
   IconCheck,
@@ -14,36 +15,48 @@ import {
   IconWarningTriangle,
 } from '../../icons/Icons';
 
-const notifications = [
-  {
-    title: 'Nova NF-e recebida',
-    desc: 'Distribuidora Sol Nascente · R$ 3.939,00',
-    time: '12 min',
-    bg: 'bg-accent-soft',
-    icon: <IconDocument size={16} color="var(--accent-2)" />,
-  },
-  {
-    title: 'Certificado próximo do vencimento',
-    desc: 'Expira em 38 dias (26/07/2026)',
-    time: '2 h',
-    bg: 'bg-warn-soft',
-    icon: <IconWarningTriangle size={16} />,
-  },
-  {
-    title: 'Coleta concluída',
-    desc: '16 documentos sincronizados com a SEFAZ',
-    time: '12 min',
-    bg: 'bg-pos-soft',
-    icon: <IconCheck size={16} color="var(--pos)" />,
-  },
-];
-
 export default function Topbar() {
   const { theme, toggleTheme } = useTheme();
   const { query, setQuery } = useSearch();
   const { data: company } = useApi('company');
+  const { data: nfes } = useApi('nfes');
   const [companyOpen, setCompanyOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+
+  const notifications = useMemo(() => {
+    const list = [];
+    const ultima = nfes && [...nfes].sort((a, b) => b.data.localeCompare(a.data))[0];
+    if (ultima) {
+      list.push({
+        title: 'Nova NF-e recebida',
+        desc: `${shortName(ultima.fornecedor)} · ${brl(ultima.valor)}`,
+        time: formatDate(ultima.data),
+        bg: 'bg-accent-soft',
+        icon: <IconDocument size={16} color="var(--accent-2)" />,
+      });
+    }
+    const cert = company?.certificate;
+    const dias = cert ? daysUntil(cert.validoAte) : null;
+    if (dias !== null && dias <= 60) {
+      list.push({
+        title: dias < 0 ? 'Certificado vencido' : 'Certificado próximo do vencimento',
+        desc: dias < 0 ? `Vencido há ${Math.abs(dias)} dias (${cert.validoAte})` : `Expira em ${dias} dias (${cert.validoAte})`,
+        time: '',
+        bg: 'bg-warn-soft',
+        icon: <IconWarningTriangle size={16} />,
+      });
+    }
+    if (company?.sync) {
+      list.push({
+        title: 'Última coleta',
+        desc: `${nfes?.length ?? 0} notas sincronizadas no total`,
+        time: timeAgo(company.sync.lastSync),
+        bg: 'bg-pos-soft',
+        icon: <IconCheck size={16} color="var(--pos)" />,
+      });
+    }
+    return list;
+  }, [nfes, company]);
 
   return (
     <header className="sticky top-0 z-40 flex h-[66px] flex-none items-center gap-4 border-b border-border bg-surface px-[26px]">
@@ -135,6 +148,9 @@ export default function Topbar() {
                   <span className="whitespace-nowrap text-[10.5px] text-text-3">{n.time}</span>
                 </div>
               ))}
+              {notifications.length === 0 && (
+                <div className="px-4 py-6 text-center text-[12px] text-text-3">Nenhuma notificação por enquanto.</div>
+              )}
             </div>
           )}
         </div>

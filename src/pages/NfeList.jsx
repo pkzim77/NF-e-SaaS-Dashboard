@@ -4,15 +4,9 @@ import { useSearch } from '../context/SearchContext';
 import { useToast } from '../context/ToastContext';
 import { useApi } from '../hooks/useApi';
 import LoadingState from '../components/ui/LoadingState';
-import { brl, formatDate, initials, shortName } from '../utils/format';
+import { brl, formatDate, initials, monthYearLabel, shortName } from '../utils/format';
 import { toneBg, toneText } from '../utils/tone';
 import { IconDownload, IconEye, IconSearch } from '../icons/Icons';
-
-function periodLabel(ym) {
-  const [y, m] = ym.split('-');
-  const label = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(+y, +m - 1, 1));
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
 
 function statusBadge(sit) {
   return sit === 'autorizada'
@@ -43,7 +37,7 @@ export default function NfeList() {
   const periodOptions = useMemo(() => {
     if (!nfes) return [];
     const months = [...new Set(nfes.map((n) => n.data.slice(0, 7)))].sort((a, b) => b.localeCompare(a));
-    return months.map((id) => ({ id, label: periodLabel(id) }));
+    return months.map((id) => ({ id, label: monthYearLabel(id) }));
   }, [nfes]);
 
   const list = useMemo(() => {

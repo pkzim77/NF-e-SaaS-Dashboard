@@ -18,6 +18,7 @@ export function serializeNfe(n) {
     totalProd: n.totalProd,
     valor: n.valor,
     chave: n.chave,
+    xml: n.xml,
     itens: n.itens.map((it) => ({
       codigo: it.codigo,
       descricao: it.descricao,

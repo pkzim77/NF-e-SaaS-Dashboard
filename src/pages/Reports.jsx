@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react';
 import Card from '../components/ui/Card';
+import LoadingState from '../components/ui/LoadingState';
 import AreaChart from '../components/charts/AreaChart';
 import { useToast } from '../context/ToastContext';
-import { nfes } from '../data/nfes';
-import { suppliers } from '../data/suppliers';
-import { monthly } from '../data/monthly';
-import { brl, brlShort, num, shortName } from '../utils/format';
+import { useApi } from '../hooks/useApi';
+import { brl, monthYearLabel, num, shortName } from '../utils/format';
 import { IconFile } from '../icons/Icons';
 
 const TABS = [
@@ -15,13 +14,15 @@ const TABS = [
   { id: 'financeiro', label: 'Financeiro' },
 ];
 
-const NOTAS_POR_MES = [214, 231, 205, 247, 259, 128];
-
 export default function Reports() {
   const showToast = useToast();
   const [tab, setTab] = useState('compras');
+  const { data: nfes } = useApi('nfes');
+  const { data: suppliers } = useApi('suppliers');
+  const { data: company } = useApi('company');
 
   const fornRank = useMemo(() => {
+    if (!nfes || !suppliers) return [];
     const agg = {};
     nfes.forEach((n) => {
       if (n.sit === 'cancelada') return;
@@ -31,13 +32,14 @@ export default function Reports() {
       .map(([id, v]) => {
         const s = suppliers.find((x) => x.id === id);
         const notas = nfes.filter((n) => n.supId === id && n.sit !== 'cancelada').length;
-        return { id, nome: shortName(s.nome), cnpj: s.cnpj, notas, v };
+        return { id, nome: shortName(s?.nome || '—'), cnpj: s?.cnpj || '—', notas, v };
       })
       .sort((a, b) => b.v - a.v)
       .map((s, i) => ({ ...s, rank: String(i + 1).padStart(2, '0'), volume: brl(s.v) }));
-  }, []);
+  }, [nfes, suppliers]);
 
   const prodRank = useMemo(() => {
+    if (!nfes) return [];
     const map = {};
     nfes.forEach((n) => {
       if (n.sit === 'cancelada') return;
@@ -51,34 +53,59 @@ export default function Reports() {
       .sort((a, b) => b[1].t - a[1].t)
       .slice(0, 8)
       .map(([nome, d]) => ({ nome, qtd: num(d.q), medio: brl(+(d.t / d.q).toFixed(2)), total: brl(+d.t.toFixed(2)) }));
-  }, []);
+  }, [nfes]);
 
-  const finCards = [
-    { label: 'Gasto médio mensal', value: brl(195400), delta: 'baseado em 6 meses', colorClass: 'text-text-3' },
-    { label: 'Maior mês', value: brl(241870), delta: 'Maio 2026', colorClass: 'text-text-3' },
-    { label: 'Projeção anual', value: brlShort(2344800), delta: '+14,6% vs 2025', colorClass: 'text-pos' },
-  ];
+  const monthly = company?.monthly || [];
+
+  const notasPorMes = useMemo(() => {
+    if (!nfes) return {};
+    const m = {};
+    nfes.forEach((n) => {
+      if (n.sit === 'cancelada') return;
+      const ym = n.data.slice(0, 7);
+      m[ym] = (m[ym] || 0) + 1;
+    });
+    return m;
+  }, [nfes]);
+
+  const finCards = useMemo(() => {
+    if (!monthly.length) return [];
+    const total = monthly.reduce((a, b) => a + b.v, 0);
+    const avg = total / monthly.length;
+    const max = monthly.reduce((a, b) => (b.v > a.v ? b : a), monthly[0]);
+    return [
+      { label: 'Gasto médio mensal', value: brl(avg), delta: `baseado em ${monthly.length} ${monthly.length === 1 ? 'mês' : 'meses'}`, colorClass: 'text-text-3' },
+      { label: 'Maior mês', value: brl(max.v), delta: monthYearLabel(max.ym), colorClass: 'text-text-3' },
+      { label: 'Total no período', value: brl(total), delta: `${monthly.length} ${monthly.length === 1 ? 'mês' : 'meses'}`, colorClass: 'text-pos' },
+    ];
+  }, [monthly]);
 
   const finRows = monthly.map((m, i) => {
-    const prev = i > 0 ? monthly[i - 1].v : m.v;
-    const dv = ((m.v - prev) / prev) * 100;
+    const prev = i > 0 ? monthly[i - 1].v : null;
+    const dv = prev ? ((m.v - prev) / prev) * 100 : null;
     return {
-      mes: m.m + ' 2026',
+      mes: monthYearLabel(m.ym),
       gasto: brl(m.v),
-      notas: NOTAS_POR_MES[i],
-      varLabel: i === 0 ? '—' : (dv >= 0 ? '+' : '') + dv.toFixed(1) + '%',
-      varColorClass: i === 0 ? 'text-text-3' : dv >= 0 ? 'text-pos' : 'text-danger',
+      notas: notasPorMes[m.ym] || 0,
+      varLabel: dv === null ? '—' : (dv >= 0 ? '+' : '') + dv.toFixed(1) + '%',
+      varColorClass: dv === null ? 'text-text-3' : dv >= 0 ? 'text-pos' : 'text-danger',
     };
   });
 
   const comprasTotal = monthly.reduce((a, b) => a + b.v, 0);
+
+  if (!nfes || !suppliers || !company) return <LoadingState />;
+
+  const periodLabel = monthly.length
+    ? `${monthYearLabel(monthly[0].ym)} – ${monthYearLabel(monthly[monthly.length - 1].ym)}`
+    : 'Sem dados ainda';
 
   return (
     <div>
       <div className="mb-[18px] flex flex-wrap items-end justify-between gap-3.5">
         <div>
           <h1 className="text-[26px] font-extrabold tracking-[-0.025em]">Relatórios</h1>
-          <div className="mt-1 text-[13px] text-text-3">Período: Janeiro – Junho 2026</div>
+          <div className="mt-1 text-[13px] text-text-3">Período: {periodLabel}</div>
         </div>
         <div className="flex gap-[9px]">
           <button
@@ -117,14 +144,20 @@ export default function Reports() {
         <>
           <Card className="mb-4">
             <h3 className="mb-1.5 text-[15px] font-bold">Compras por mês</h3>
-            <AreaChart data={monthly} />
-            <div className="mt-1.5 flex justify-between px-1.5">
-              {monthly.map((m) => (
-                <span key={m.m} className="text-[11.5px] font-semibold text-text-3">
-                  {m.m}
-                </span>
-              ))}
-            </div>
+            {monthly.length > 1 ? (
+              <>
+                <AreaChart data={monthly} />
+                <div className="mt-1.5 flex justify-between px-1.5">
+                  {monthly.map((m) => (
+                    <span key={m.ym} className="text-[11.5px] font-semibold text-text-3">
+                      {m.m}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="py-10 text-center text-[12.5px] text-text-3">Dados insuficientes para o gráfico ainda.</div>
+            )}
           </Card>
           <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
             <div className="grid grid-cols-3 gap-3.5 border-b border-border bg-surface-2 px-5 py-[13px]">
@@ -133,12 +166,13 @@ export default function Reports() {
               <span className="text-right text-[11px] font-bold uppercase text-text-3">% do total</span>
             </div>
             {monthly.map((m) => (
-              <div key={m.m} className="grid grid-cols-3 gap-3.5 border-b border-border px-5 py-[13px]">
-                <span className="text-[13px] font-semibold">{m.m} 2026</span>
+              <div key={m.ym} className="grid grid-cols-3 gap-3.5 border-b border-border px-5 py-[13px]">
+                <span className="text-[13px] font-semibold">{monthYearLabel(m.ym)}</span>
                 <span className="text-right font-mono text-[13.5px] font-bold">{brl(m.v)}</span>
-                <span className="text-right font-mono text-[13px] text-text-2">{Math.round((m.v / comprasTotal) * 100)}%</span>
+                <span className="text-right font-mono text-[13px] text-text-2">{comprasTotal ? Math.round((m.v / comprasTotal) * 100) : 0}%</span>
               </div>
             ))}
+            {monthly.length === 0 && <div className="p-[40px] text-center text-[12.5px] text-text-3">Nenhuma nota sincronizada ainda.</div>}
           </div>
         </>
       )}
@@ -166,20 +200,29 @@ export default function Reports() {
 
       {tab === 'produtos' && (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
-          <div className="grid grid-cols-[1fr_110px_120px_130px] gap-3.5 border-b border-border bg-surface-2 px-5 py-[13px]">
-            <span className="text-[11px] font-bold uppercase text-text-3">Produto</span>
-            <span className="text-right text-[11px] font-bold uppercase text-text-3">Qtd comprada</span>
-            <span className="text-right text-[11px] font-bold uppercase text-text-3">Valor médio</span>
-            <span className="text-right text-[11px] font-bold uppercase text-text-3">Valor total</span>
-          </div>
-          {prodRank.map((p) => (
-            <div key={p.nome} className="grid grid-cols-[1fr_110px_120px_130px] items-center gap-3.5 border-b border-border px-5 py-[13px]">
-              <span className="text-[13px] font-semibold">{p.nome}</span>
-              <span className="text-right font-mono text-[13px]">{p.qtd}</span>
-              <span className="text-right font-mono text-[13px] text-text-2">{p.medio}</span>
-              <span className="text-right font-mono text-[13.5px] font-bold">{p.total}</span>
+          {prodRank.length > 0 ? (
+            <>
+              <div className="grid grid-cols-[1fr_110px_120px_130px] gap-3.5 border-b border-border bg-surface-2 px-5 py-[13px]">
+                <span className="text-[11px] font-bold uppercase text-text-3">Produto</span>
+                <span className="text-right text-[11px] font-bold uppercase text-text-3">Qtd comprada</span>
+                <span className="text-right text-[11px] font-bold uppercase text-text-3">Valor médio</span>
+                <span className="text-right text-[11px] font-bold uppercase text-text-3">Valor total</span>
+              </div>
+              {prodRank.map((p) => (
+                <div key={p.nome} className="grid grid-cols-[1fr_110px_120px_130px] items-center gap-3.5 border-b border-border px-5 py-[13px]">
+                  <span className="text-[13px] font-semibold">{p.nome}</span>
+                  <span className="text-right font-mono text-[13px]">{p.qtd}</span>
+                  <span className="text-right font-mono text-[13px] text-text-2">{p.medio}</span>
+                  <span className="text-right font-mono text-[13.5px] font-bold">{p.total}</span>
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="p-[54px] text-center text-text-3">
+              <div className="mb-1 text-[14px] font-semibold">Itens não disponíveis</div>
+              <div className="text-[12.5px]">A SEFAZ enviou até agora apenas o resumo das notas (resNFe), sem a lista de produtos.</div>
             </div>
-          ))}
+          )}
         </div>
       )}
 

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { prisma } from './db.js';
 import { serializeCompany, serializeNfe } from './serialize.js';
+import { sincronizarEntrada } from './sefaz/sync-entrada.js';
 
 const app = express();
 app.use(cors());
@@ -11,18 +12,39 @@ const nfeInclude = { supplier: true, itens: true };
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
 app.get('/api/company', async (req, res) => {
-  const company = await prisma.company.findFirst({
-    include: { certificate: true, certHistory: true, categories: true, monthly: true },
-  });
+  const company = await prisma.company.findFirst({ include: { certificate: true } });
   if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
+
+  const nfes = await prisma.nfe.findMany({ where: { companyId: company.id, situacao: { not: 'cancelada' } } });
+  const monthlyMap = {};
+  nfes.forEach((n) => {
+    const ym = n.data.slice(0, 7);
+    monthlyMap[ym] = (monthlyMap[ym] || 0) + n.valor;
+  });
+  const monthly = Object.keys(monthlyMap)
+    .sort()
+    .map((ym) => ({ ym, m: MESES[+ym.slice(5, 7) - 1], v: +monthlyMap[ym].toFixed(2) }));
+
+  const sync = await prisma.sefazSync.findUnique({ where: { cnpj: company.cnpj.replace(/\D/g, '') } });
+
   res.json({
     ...serializeCompany(company),
     certificate: company.certificate,
-    certHistory: company.certHistory.map((h) => ({ title: h.title, desc: h.desc, date: h.date, dot: h.dot })),
-    categories: company.categories.map((c) => ({ nome: c.nome, v: c.valor, color: c.color })),
-    monthly: company.monthly.map((m) => ({ m: m.mes, v: m.valor })),
+    monthly,
+    sync: sync ? { ultNSU: sync.ultNSU, maxNSU: sync.maxNSU, lastSync: sync.lastSync } : null,
   });
+});
+
+app.post('/api/sync', async (req, res) => {
+  try {
+    const result = await sincronizarEntrada();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.patch('/api/company', async (req, res) => {

@@ -11,7 +11,7 @@ async function upsertFornecedor(companyId, cnpj, nome, ie) {
   return prisma.supplier.create({ data: { companyId, cnpj, nome, ie, cidade: '' } });
 }
 
-async function gravarResumo(companyId, res, nsu) {
+async function gravarResumo(companyId, res, nsu, xml) {
   const fornecedor = await upsertFornecedor(companyId, res.emitCnpj, res.emitNome, res.emitIe);
   const existed = await prisma.nfe.findUnique({ where: { chave: res.chave } });
   await prisma.nfe.upsert({
@@ -31,6 +31,7 @@ async function gravarResumo(companyId, res, nsu) {
       origem: 'distribuicao',
       resumo: true,
       nsu,
+      xml,
       companyId,
       supplierId: fornecedor.id,
     },
@@ -57,11 +58,17 @@ export async function sincronizarEntrada({ maxLotes = 50, reset = false } = {}) 
     lotes++;
     lastCStat = r.cStat;
     lastMotivo = r.xMotivo;
+
+    await prisma.sefazSync.update({
+      where: { cnpj: config.cnpj },
+      data: { maxNSU: r.maxNSU, lastSync: new Date().toISOString() },
+    });
+
     if (r.cStat !== '138') break; // 137 = nada novo; 656 = consumo indevido; etc.
 
     for (const doc of r.docs) {
       if ((doc.schema || '').startsWith('resNFe')) {
-        if (await gravarResumo(company.id, parseResNFe(doc.xml), doc.nsu)) novos++;
+        if (await gravarResumo(company.id, parseResNFe(doc.xml), doc.nsu, doc.xml)) novos++;
         resumos++;
       } else {
         outros++; // procNFe / eventos: tratados em etapa futura (manifestação)
@@ -69,10 +76,7 @@ export async function sincronizarEntrada({ maxLotes = 50, reset = false } = {}) 
     }
 
     ultNSU = r.ultNSU;
-    await prisma.sefazSync.update({
-      where: { cnpj: config.cnpj },
-      data: { ultNSU, maxNSU: r.maxNSU, lastSync: new Date().toISOString() },
-    });
+    await prisma.sefazSync.update({ where: { cnpj: config.cnpj }, data: { ultNSU } });
 
     if (r.ultNSU === r.maxNSU) break; // sincronizado até o fim
   }

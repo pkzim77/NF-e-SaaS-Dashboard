@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
+    "dev": "node --watch-path=src --watch-path=.env src/index.js",
     "start": "node src/index.js",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
@@ -20,7 +20,8 @@
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "nf-e-saas-dashboard": "file:.."
   },
   "devDependencies": {
     "prisma": "^7.8.0"

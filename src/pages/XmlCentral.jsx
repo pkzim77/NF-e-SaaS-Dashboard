@@ -1,25 +1,25 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { nfes } from '../data/nfes';
+import { useApi } from '../hooks/useApi';
+import LoadingState from '../components/ui/LoadingState';
 import { useToast } from '../context/ToastContext';
-import { brl, formatDate, shortName } from '../utils/format';
+import { brl, formatDate, monthYearLabel, shortName } from '../utils/format';
 import { IconDownload, IconEye, IconFolder, IconSwap } from '../icons/Icons';
-
-const periods = [
-  { id: '2026-06', label: 'Junho 2026' },
-  { id: '2026-05', label: 'Maio 2026' },
-];
 
 export default function XmlCentral() {
   const navigate = useNavigate();
   const showToast = useToast();
+  const { data: nfes } = useApi('nfes');
 
   const groups = useMemo(() => {
+    if (!nfes) return [];
     const sorted = [...nfes].sort((a, b) => b.data.localeCompare(a.data));
-    return periods.map((g) => {
-      const items = sorted.filter((n) => n.data.startsWith(g.id));
+    const months = [...new Set(sorted.map((n) => n.data.slice(0, 7)))];
+    return months.map((ym) => {
+      const items = sorted.filter((n) => n.data.startsWith(ym));
       return {
-        ...g,
+        id: ym,
+        label: monthYearLabel(ym),
         count: items.length,
         total: brl(items.reduce((a, b) => a + (b.sit === 'cancelada' ? 0 : b.valor), 0)),
         items: items.map((n) => ({
@@ -29,16 +29,21 @@ export default function XmlCentral() {
           data: formatDate(n.data),
           valor: brl(n.valor),
           numero: n.numero,
+          hasXml: !!n.xml,
         })),
       };
     });
-  }, []);
+  }, [nfes]);
+
+  if (!nfes) return <LoadingState />;
 
   return (
     <div>
       <div className="mb-5">
         <h1 className="text-[26px] font-extrabold tracking-[-0.025em]">Central de XML</h1>
-        <div className="mt-1 text-[13px] text-text-3">Arquivos organizados por período · {nfes.length} XMLs armazenados</div>
+        <div className="mt-1 text-[13px] text-text-3">
+          Arquivos organizados por período · {nfes.length} notas · {nfes.filter((n) => n.xml).length} com XML completo armazenado
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
@@ -48,7 +53,7 @@ export default function XmlCentral() {
               <div className="flex items-center gap-[11px]">
                 <IconFolder />
                 <span className="text-[14px] font-bold">{g.label}</span>
-                <span className="rounded-full bg-surface-3 px-2.5 py-0.5 text-[11.5px] font-semibold text-text-3">{g.count} arquivos</span>
+                <span className="rounded-full bg-surface-3 px-2.5 py-0.5 text-[11.5px] font-semibold text-text-3">{g.count} notas</span>
               </div>
               <span className="font-mono text-[13px] font-bold">{g.total}</span>
             </div>
@@ -56,7 +61,7 @@ export default function XmlCentral() {
               <div key={x.id} className="flex items-center gap-[13px] border-b border-border px-5 py-[11px]">
                 <IconSwap size={17} color="var(--text-3)" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-[12.5px] font-semibold">{x.file}</div>
+                  <div className="truncate font-mono text-[12.5px] font-semibold">{x.hasXml ? x.file : `${x.file} (somente resumo)`}</div>
                   <div className="text-[11px] text-text-3">
                     {x.fornecedor} · {x.data}
                   </div>
@@ -69,8 +74,9 @@ export default function XmlCentral() {
                   <IconEye size={15} />
                 </button>
                 <button
-                  onClick={() => showToast('XML ' + x.numero + ' baixado')}
-                  className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-border bg-surface text-text-2"
+                  onClick={() => (x.hasXml ? showToast('XML ' + x.numero + ' baixado') : showToast('XML completo não disponível para esta nota'))}
+                  disabled={!x.hasXml}
+                  className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-border bg-surface text-text-2 disabled:opacity-40"
                 >
                   <IconDownload size={15} />
                 </button>
@@ -78,6 +84,12 @@ export default function XmlCentral() {
             ))}
           </div>
         ))}
+        {groups.length === 0 && (
+          <div className="rounded-2xl border border-border bg-surface p-[54px] text-center text-text-3 shadow-card">
+            <div className="mb-1 text-[14px] font-semibold">Nenhuma nota sincronizada ainda</div>
+            <div className="text-[12.5px]">Execute a coleta da Distribuição DFe para ver os arquivos aqui.</div>
+          </div>
+        )}
       </div>
     </div>
   );
