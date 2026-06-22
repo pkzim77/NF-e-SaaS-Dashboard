@@ -1,11 +1,11 @@
 // Mostra os dados do certificado A1 (titular, CNPJ, validade) sem expor a senha.
-// Lê o .pfx pelo Node e usa o openssl só para parsear (via stdin).
+// Lê o .pfx com node-forge (não depende de openssl no PATH).
 //
 //   node scripts/cert-info.js
 //
 import 'dotenv/config';
 import fs from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import forge from 'node-forge';
 
 const certPath = process.env.CERT_PATH;
 const certPassword = process.env.CERT_PASSWORD;
@@ -15,29 +15,34 @@ if (!certPath || !certPassword) {
   process.exit(1);
 }
 
-const pfx = fs.readFileSync(certPath); // Node lê o caminho com acentos/espaços sem problema
-const env = { ...process.env, CERT_PASSWORD: certPassword };
+const der = fs.readFileSync(certPath, 'binary');
+const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(der), certPassword);
+const certBag = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || [])[0];
+if (!certBag?.cert) {
+  console.error('✗ Não consegui ler o certificado do .pfx (senha incorreta?).');
+  process.exit(1);
+}
 
-// pfx -> PEM (somente o certificado, sem a chave privada)
-const pem = execFileSync(
-  'openssl',
-  ['pkcs12', '-nodes', '-clcerts', '-nokeys', '-passin', 'env:CERT_PASSWORD'],
-  { input: pfx, env }
-);
+const cert = certBag.cert;
+const subjectAttrs = cert.subject.attributes.map((a) => `${a.shortName || a.name}=${a.value}`).join(', ');
+const cn = cert.subject.getField('CN')?.value || '';
 
-const subject = execFileSync('openssl', ['x509', '-noout', '-subject'], { input: pem }).toString().trim();
-const dates = execFileSync('openssl', ['x509', '-noout', '-dates'], { input: pem }).toString().trim();
+// O CNPJ aparece no CN como "NOME:CNPJ" ou no subjectAltName (otherName OID 2.16.76.1.3.3).
+let cnpj = (cn.match(/:(\d{14})\b/) || [])[1] || null;
+if (!cnpj) {
+  const alt = cert.getExtension('subjectAltName');
+  const der2 = alt ? JSON.stringify(alt) : '';
+  cnpj = (der2.match(/(\d{14})/) || [])[1] || null;
+}
 
-// O CNPJ aparece no subject como CN="NOME:CNPJ" ou no campo serialNumber
-const cnpjMatch = subject.match(/:(\d{14})\b/) || subject.match(/serialNumber\s*=\s*(\d{14})/i);
-const cnpj = cnpjMatch ? cnpjMatch[1] : null;
-
-console.log('Subject :', subject);
-console.log(dates);
+console.log('Subject :', subjectAttrs);
+console.log('CN      :', cn);
+console.log('Válido de :', cert.validity.notBefore.toISOString());
+console.log('Válido até:', cert.validity.notAfter.toISOString());
 if (cnpj) {
   const fmt = cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
   console.log(`\n✓ CNPJ do titular: ${cnpj}  (${fmt})`);
   console.log('  → coloque em SEFAZ_CNPJ no server/.env');
 } else {
-  console.log('\n⚠ Não consegui extrair o CNPJ automaticamente do subject acima.');
+  console.log('\n⚠ Não consegui extrair o CNPJ automaticamente. Veja o CN acima.');
 }

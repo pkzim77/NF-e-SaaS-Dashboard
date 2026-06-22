@@ -9,10 +9,12 @@
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio",
+    "db:reset": "node scripts/reset-db.js",
     "sefaz:status": "node scripts/test-status.js",
     "sefaz:cert": "node scripts/cert-info.js",
     "sefaz:entrada": "node scripts/test-entrada.js",
-    "sefaz:sync": "node scripts/sync-entrada.js"
+    "sefaz:sync": "node scripts/sync-entrada.js",
+    "sefaz:manifestar": "node scripts/manifestar.js"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",
@@ -21,7 +23,9 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "nf-e-saas-dashboard": "file:.."
+    "nf-e-saas-dashboard": "file:..",
+    "node-forge": "^1.4.0",
+    "xml-crypto": "^6.1.2"
   },
   "devDependencies": {
     "prisma": "^7.8.0"
